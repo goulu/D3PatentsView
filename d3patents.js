@@ -1,18 +1,13 @@
-var w = 1280,
-    h = 800,
+var w = 1200,
+    h = 1200,
     r = 6,
     z = d3.scale.category20c();
 
 var force = d3.layout.force()
     .gravity(0.06)
-    .charge(-20)
-    .linkDistance(50)
+    .charge(-200)
+    .linkDistance(20)
     .size([w,h]);
-
-var svg = d3.select("#chart").append("svg:svg")
-    .attr("width", w)
-    .attr("height", h)
-  .append("svg:g");
 
 //Append a SVG to the body of the html page. Assign this SVG as an object to svg
 var svg = d3.select("body").append("svg")
@@ -27,6 +22,7 @@ var tip = d3.tip()
     var date = d.date.substr(0, 4);
     return d.name + " " + cpy + " (" + date + ")</br>" + d.title + "</span>";
   })
+  
 svg.call(tip);
 
 //Read the data from the mis element 
@@ -89,65 +85,35 @@ var node = svg.selectAll(".node")
   .enter().append("circle")
   .attr("class", "node")
   .attr("r", 8)
+  .attr("ox", function(d) {return d.ox= (d.ox === undefined) ? 5*d.x : d.ox;})
   .style("fill", function(d) {
     return z(d.assignee);
   })
   .call(force.drag)
   .on('mouseover', tip.show)
   .on('mouseout', tip.hide)
-//  .on('click', connectedNodes)
+  .on('click', connectedNodes)
   .on("dblclick",function(d){window.open(url+d.name, '_blank')});
-
-var padding = 1, // separation between circles
-  radius = 8;
-
-function collide(alpha) {
-  var quadtree = d3.geom.quadtree(graph.nodes);
-  return function(d) {
-    var rb = 2 * radius + padding,
-      nx1 = d.x - rb,
-      nx2 = d.x + rb,
-      ny1 = d.y - rb,
-      ny2 = d.y + rb;
-    quadtree.visit(function(quad, x1, y1, x2, y2) {
-      if (quad.point && (quad.point !== d)) {
-        var x = d.x - quad.point.x,
-          y = d.y - quad.point.y,
-          l = Math.sqrt(x * x + y * y);
-        if (l < rb) {
-          l = (l - rb) / l * alpha;
-          d.x -= x *= l;
-          d.y -= y *= l;
-          quad.point.x += x;
-          quad.point.y += y;
-        }
-      }
-      return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
-    });
-  };
-}
 
 
 //Now we are giving the SVGs co-ordinates - the force layout is generating the co-ordinates which this code is using to update the attributes of the SVG elements
 force.on("tick", function() {
         
   link.attr("x1", function(d) {
-      return d.source.x;
+      return d.source.ox;
     })
     .attr("y1", function(d) {
       return d.source.y;
     })
     .attr("x2", function(d) {
-      return d.target.x;
+      return d.target.ox;
     })
     .attr("y2", function(d) {
       return d.target.y;
     });
 
-    node.attr("cx", function(d) { return d.x = Math.max(r, Math.min(w - r, d.x)); })
+    node.attr("cx", function(d) { return  d.ox = (d.ox === undefined) ? d.x : d.ox;})
         .attr("cy", function(d) { return d.y = Math.max(r, Math.min(h - r, d.y)); });
-
-  node.each(collide(0.5));
 });
 
 //---Insert-------
