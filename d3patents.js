@@ -5,8 +5,8 @@ var w = 1280,
 
 var force = d3.layout.force()
     .gravity(0.06)
-    .charge(-50)
-    .linkDistance(20)
+    .charge(-20)
+    .linkDistance(50)
     .size([w,h]);
 
 var svg = d3.select("#chart").append("svg:svg")
@@ -81,11 +81,7 @@ function connectedNodes() {
   }
 }
 
-function open(){
-    d = d3.select(this).node().__data__;
-    url='https://www.google.com/patents/US';
-    window.open(url+d.name, '_blank');
-}
+var url='https://www.google.com/patents/US';
 
 //Do the same with the circles for the nodes - no 
 var node = svg.selectAll(".node")
@@ -100,7 +96,7 @@ var node = svg.selectAll(".node")
   .on('mouseover', tip.show)
   .on('mouseout', tip.hide)
 //  .on('click', connectedNodes)
-  .on("dblclick",open);
+  .on("dblclick",function(d){window.open(url+d.name, '_blank')});
 
 var padding = 1, // separation between circles
   radius = 8;
