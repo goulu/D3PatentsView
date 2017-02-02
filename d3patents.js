@@ -1,142 +1,64 @@
-var w = 1200,
-    h = 960,
-    r = 6,
-    z = d3.scale.category20c();
+var svg = d3.select("svg"),
+    width = +svg.attr("width"),
+    height = +svg.attr("height");
 
-var force = d3.layout.force()
-    .gravity(.1)
-    .charge(-500)
-    //    .linkDistance(50)
-    .size([w, h]);
+var color = d3.scaleOrdinal(d3.schemeCategory20);
 
-//Append a SVG to the body of the html page. Assign this SVG as an object to svg
-var svg = d3.select("body").append("svg")
-    .attr("width", w)
-    .attr("height", h);
+var simulation = d3.forceSimulation()
+    .force("link", d3.forceLink())
+    .force("charge", d3.forceManyBody())
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collide", d3.forceCollide().radius(function(d) { return d.r + 0.5; }).iterations(20))
+;
+    
 
-var tip = d3.tip()
-    .attr('class', 'd3-tip')
-    .offset([-10, 0])
-    .html(function(d) {
-        var cpy = d.assignee.substr(0, d.assignee.indexOf(' '));
-        var date = d.date.substr(0, 4);
-        return d.name + " " + cpy + " (" + date + ")</br>" + d.title + "</span>";
-    })
+d3.json("patents.json", function(error, graph) {
+    if (error) throw error;
 
-svg.call(tip);
-
-//Read the data from the mis element
-//var mis = document.getElementById('mis').innerHTML;
-d3.json('patents.json', function(error, graph) {
-    if (error) return console.warn(error);
-    update(graph);
-});
-
-function update(graph) {
-    //Creates the graph data structure out of the json data
-    force.nodes(graph.nodes)
-        .links(graph.links)
-        .start();
-
-    //Create all the line svgs but without locations yet
-    var link = svg.selectAll(".link")
+    var link = svg.append("g")
+        .attr("class", "links")
+        .selectAll("line")
         .data(graph.links)
         .enter().append("line")
-        .attr("class", "link")
-        .style("marker-end", "url(#suit)") //Added
+        .style("marker-end",  "url(#suit)") // arrows
     ;
 
-    //Toggle stores whether the highlighting is on
-    var toggle = 0;
-    //Create an array logging what is connected to what
-    var linkedByIndex = {};
-    for (i = 0; i < graph.nodes.length; i++) {
-        linkedByIndex[i + "," + i] = 1;
-    };
-    graph.links.forEach(function(d) {
-        linkedByIndex[d.source.index + "," + d.target.index] = 1;
-    });
-    //This function looks up whether a pair are neighbours
-    function neighboring(a, b) {
-        return linkedByIndex[a.index + "," + b.index];
-    }
-
-    function connectedNodes() {
-        if (toggle == 0) {
-            //Reduce the opacity of all but the neighbouring nodes
-            d = d3.select(this).node().__data__;
-            node.style("opacity", function(o) {
-                return neighboring(d, o) | neighboring(o, d) ? 1 : 0.1;
-            });
-            link.style("opacity", function(o) {
-                return d.index == o.source.index | d.index == o.target.index ? 1 : 0.1;
-            });
-            //Reduce the op
-            toggle = 1;
-        } else {
-            //Put them back to opacity=1
-            node.style("opacity", 1);
-            link.style("opacity", 1);
-            toggle = 0;
-        }
-    }
-
-    var url = 'https://www.google.com/patents/US';
-
-    //Do the same with the circles for the nodes - no
-    var node = svg.selectAll(".node")
+    var node = svg.append("g")
+        .attr("class", "nodes")
+        .selectAll("circle")
         .data(graph.nodes)
-        .enter().append("circle")
-        .attr("class", "node")
-        .attr("r", 8)
+        .enter()
+            .append("circle")
+        .attr("r", 10)
+        // ugly way to constrain X to the date. TODO : improve
         .attr("ox", function(d) {
             return d.ox = (d.ox === undefined) ? 2 * d.x : d.ox;
         })
-        .style("fill", function(d) {
-            return z(d.assignee);
+        .attr("fill", function(d) {
+            return color(d.assignee);
         })
-        .call(force.drag)
-        .on('mouseover', tip.show)
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended))
+                .on('mouseover', tip.show)
         .on('mouseout', tip.hide)
-        .on('click', connectedNodes)
+//         .on('click', connectedNodes)
         .on("dblclick", function(d) {
+            var url = 'https://www.google.com/patents/US';
             window.open(url + d.name, '_blank')
         });
 
-    var padding = 3, // separation between circles
-        radius = 8;
+    simulation
+        .nodes(graph.nodes)
+        .on("tick", ticked);
 
-    function collide(alpha) {
-        var quadtree = d3.geom.quadtree(graph.nodes);
-        return function(d) {
-            var rb = 2 * radius + padding,
-                nx1 = d.x - rb,
-                nx2 = d.x + rb,
-                ny1 = d.y - rb,
-                ny2 = d.y + rb;
-            quadtree.visit(function(quad, x1, y1, x2, y2) {
-                if (quad.point && (quad.point !== d)) {
-                    var x = d.x - quad.point.x,
-                        y = d.y - quad.point.y,
-                        l = Math.sqrt(x * x + y * y);
-                    if (l < rb) {
-                        l = (l - rb) / l * alpha;
-                        d.x -= x *= l;
-                        d.y -= y *= l;
-                        quad.point.x += x;
-                        quad.point.y += y;
-                    }
-                }
-                return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
-            });
-        };
-    }
+    simulation.force("link")
+        .links(graph.links);
 
-
-    //Now we are giving the SVGs co-ordinates - the force layout is generating the co-ordinates which this code is using to update the attributes of the SVG elements
-    force.on("tick", function() {
-
-        link.attr("x1", function(d) {
+    function ticked() {
+        link
+            .attr("x1", function(d) {
                 return d.source.ox;
             })
             .attr("y1", function(d) {
@@ -149,19 +71,47 @@ function update(graph) {
                 return d.target.y;
             });
 
-        node.each(collide(0.1));
-
-        node.attr("cx", function(d) {
+        node
+            .attr("cx", function(d) {
                 return d.ox = (d.ox === undefined) ? d.x : d.ox;
             })
             .attr("cy", function(d) {
-                return d.y = Math.max(r, Math.min(h - r, d.y));
+                return d.y;
             });
 
-    });
-};
+    }
+});
 
-//---Insert-------
+function dragstarted(d) {
+    if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+}
+
+function dragged(d) {
+    d.fx = d3.event.x;
+    d.fy = d3.event.y;
+}
+
+function dragended(d) {
+    if (!d3.event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+}
+
+// tooltips
+var tip = d3.tip()
+    .attr('class', 'd3-tip')
+    .offset([-10, 0])
+    .html(function(d) {
+        var cpy = d.assignee.substr(0, d.assignee.indexOf(' '));
+        var date = d.date.substr(0, 4);
+        return d.name + " " + cpy + " (" + date + ")</br>" + d.title + "</span>";
+    })
+
+svg.call(tip);
+
+// arrows
 svg.append("defs").selectAll("marker")
     .data(["suit", "licensing", "resolved"])
     .enter().append("marker")
@@ -178,4 +128,4 @@ svg.append("defs").selectAll("marker")
     .attr("d", "M0,-5L10,0L0,5 L10,0 L0, -5")
     .style("stroke", "#4679BD")
     .style("opacity", "0.6");
-//---End Insert---
+
