@@ -1,26 +1,46 @@
-var svg = d3.select("svg"),
-    width = +svg.attr("width"),
-    height = +svg.attr("height");
 
-var color = d3.scaleOrdinal(d3.schemeCategory20);
+var width = 1000,
+    height = 750,
+    radius = 5;
+    
+d3.select("div#chart1")
+   .append("div")
+   .classed("svg-container", true) //container class to make it responsive
+   .append("svg")
+   //responsive SVG needs these 2 attributes and no width and height attr
+   .attr("preserveAspectRatio", "xMinYMin meet")
+   .attr("viewBox","0 0 " + width + " " + height)
+   //class to make it responsive
+   .classed("svg-content-responsive", true); 
+
+var svg = d3.select("svg"),
+    color = d3.scaleOrdinal(d3.schemeCategory20);
+
+svg.append("rect")
+    .attr("width", "100%")
+    .attr("height", "100%")
+    .attr("fill", "#f2f2f2");
 
 var simulation = d3.forceSimulation()
-    .force("link", d3.forceLink())
-    .force("charge", d3.forceManyBody())
+    .force("link", d3.forceLink(0.1))
+    .force("charge", d3.forceManyBody().strength(-1))
     .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("collide", d3.forceCollide().radius(function(d) { return d.r + 0.5; }).iterations(20))
-;
-    
+    .force("collide", d3.forceCollide(radius + 2)
+        .strength(2)
+        .iterations(100)
+    );
+
 
 d3.json("patents.json", function(error, graph) {
     if (error) throw error;
 
     var link = svg.append("g")
         .attr("class", "links")
+        .attr("length", 1)
         .selectAll("line")
         .data(graph.links)
         .enter().append("line")
-        .style("marker-end",  "url(#suit)") // arrows
+        .style("marker-end", "url(#suit)") // arrows
     ;
 
     var node = svg.append("g")
@@ -28,12 +48,8 @@ d3.json("patents.json", function(error, graph) {
         .selectAll("circle")
         .data(graph.nodes)
         .enter()
-            .append("circle")
-        .attr("r", 10)
-        // ugly way to constrain X to the date. TODO : improve
-        .attr("ox", function(d) {
-            return d.ox = (d.ox === undefined) ? 2 * d.x : d.ox;
-        })
+        .append("circle")
+        .attr("r", radius)
         .attr("fill", function(d) {
             return color(d.assignee);
         })
@@ -41,9 +57,9 @@ d3.json("patents.json", function(error, graph) {
             .on("start", dragstarted)
             .on("drag", dragged)
             .on("end", dragended))
-                .on('mouseover', tip.show)
+        .on('mouseover', tip.show)
         .on('mouseout', tip.hide)
-//         .on('click', connectedNodes)
+        //         .on('click', connectedNodes)
         .on("dblclick", function(d) {
             var url = 'https://www.google.com/patents/US';
             window.open(url + d.name, '_blank')
@@ -57,6 +73,14 @@ d3.json("patents.json", function(error, graph) {
         .links(graph.links);
 
     function ticked() {
+        node
+            .attr("cx", function(d) {
+                d.x=d.ox = (d.ox === undefined) ? d.x : d.ox; // constrain x
+                return d.x = Math.max(radius, Math.min(width - radius, d.x));
+            })
+            .attr("cy", function(d) {
+                return d.y = Math.max(radius, Math.min(height - radius, d.y));
+            });
         link
             .attr("x1", function(d) {
                 return d.source.ox;
@@ -69,14 +93,6 @@ d3.json("patents.json", function(error, graph) {
             })
             .attr("y2", function(d) {
                 return d.target.y;
-            });
-
-        node
-            .attr("cx", function(d) {
-                return d.ox = (d.ox === undefined) ? d.x : d.ox;
-            })
-            .attr("cy", function(d) {
-                return d.y;
             });
 
     }
@@ -99,14 +115,32 @@ function dragended(d) {
     d.fy = null;
 }
 
+// http://stackoverflow.com/questions/14484787/wrap-text-in-javascript
+function wordWrapToStringList (text, maxLength) {
+    var result = [], line = [];
+    var length = 0;
+    text.split(" ").forEach(function(word) {
+        if ((length + word.length) >= maxLength) {
+            result.push(line.join(" "));
+            line = []; length = 0;
+        }
+        length += word.length + 1;
+        line.push(word);
+    });
+    if (line.length > 0) {
+        result.push(line.join(" "));
+    }
+    return result;
+};
 // tooltips
 var tip = d3.tip()
     .attr('class', 'd3-tip')
-    .offset([-10, 0])
+    .offset([-radius, 0])
     .html(function(d) {
-        var cpy = d.assignee.substr(0, d.assignee.indexOf(' '));
-        var date = d.date.substr(0, 4);
-        return d.name + " " + cpy + " (" + date + ")</br>" + d.title + "</span>";
+        cpy = d.assignee.substr(0, d.assignee.indexOf(' '));
+        date = d.date.substr(0, 4);
+        title=wordWrapToStringList(d.title, 60).join('<br/>');
+        return "US"+d.name + " " + cpy + " (" + date + ")</br>" + title + "</span>";
     })
 
 svg.call(tip);
@@ -128,4 +162,3 @@ svg.append("defs").selectAll("marker")
     .attr("d", "M0,-5L10,0L0,5 L10,0 L0, -5")
     .style("stroke", "#4679BD")
     .style("opacity", "0.6");
-
